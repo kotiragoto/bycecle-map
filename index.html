@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Taito's Cycling Odyssey</title>
+<title>RIDES MAP</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Noto+Serif+JP:wght@300;400;600&family=Space+Mono&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
@@ -170,14 +170,107 @@
     pointer-events:none; backdrop-filter:blur(4px);
     transition:opacity .5s;
   }
+
+  /* distance popup */
+  #distance-popup {
+    position:fixed; z-index:1200;
+    background:rgba(12,19,34,.95); border:1px solid var(--c2);
+    border-radius:8px; padding:10px 16px;
+    font-size:12px; color:var(--txt); letter-spacing:.04em;
+    backdrop-filter:blur(8px);
+    box-shadow:0 4px 20px rgba(0,0,0,.5);
+    display:none;
+    pointer-events:none;
+  }
+  #distance-popup .dist-label {
+    font-size:9px; color:var(--txt2); margin-bottom:4px;
+    text-transform:uppercase; letter-spacing:.1em;
+  }
+  #distance-popup .dist-value {
+    font-family:'Space Mono',monospace; font-size:18px;
+    color:var(--c2);
+  }
+
+  /* mobile toggle button */
+  #mobile-toggle {
+    display:none;
+    position:fixed; top:12px; left:12px; z-index:1100;
+    width:44px; height:44px; border-radius:8px;
+    background:var(--panel); border:1px solid var(--bdr);
+    color:var(--txt); font-size:20px;
+    cursor:pointer; align-items:center; justify-content:center;
+  }
+  #mobile-toggle:hover { background:var(--card); }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 768px) {
+    body { flex-direction:column-reverse; }
+
+    #sidebar {
+      width:100%; min-width:100%; height:auto; max-height:45vh;
+      border-right:none; border-top:1px solid var(--bdr);
+      position:relative;
+    }
+    #sidebar.collapsed {
+      max-height:0; overflow:hidden; border-top:none;
+    }
+
+    .sh { padding:14px 16px 10px; }
+    .sh-title { font-size:17px; }
+    .sh-eyebrow { font-size:7.5px; }
+    .sh-sub { font-size:10px; }
+
+    .stats { flex-wrap:nowrap; }
+    .stat { padding:8px 6px; }
+    .stat-n { font-size:15px; }
+    .stat-l { font-size:7.5px; }
+
+    .trips { padding:10px; }
+    .tcard { margin-bottom:8px; }
+    .tcard-top { padding:10px 12px; gap:9px; }
+    .tnum { width:26px; height:26px; font-size:11px; }
+    .tname { font-size:11.5px; }
+    .troute { font-size:9.5px; }
+    .tmeta { font-size:8.5px; gap:6px; }
+    .tbadge { font-size:7px; padding:2px 5px; }
+
+    .cplist { padding:0 12px 10px; }
+    .cpitem { font-size:9.5px; gap:7px; }
+    .cpdot { width:16px; height:16px; font-size:6.5px; }
+
+    .sfooter { padding:8px 12px; font-size:8.5px; }
+
+    #map { flex:1; height:55vh; }
+
+    #hint {
+      left:12px; bottom:auto; top:12px;
+      font-size:9px; padding:6px 10px;
+    }
+
+    #mobile-toggle { display:flex; }
+
+    .leaflet-control-zoom { margin-bottom:12px !important; margin-right:8px !important; }
+  }
+
+  @media (max-width: 480px) {
+    #sidebar { max-height:50vh; }
+    #map { height:50vh; }
+
+    .sh-title { font-size:15px; }
+    .stats { overflow-x:auto; }
+    .stat { min-width:70px; }
+
+    .tcard-top { flex-wrap:wrap; }
+    .tbadge { order:-1; margin-bottom:4px; }
+  }
 </style>
 </head>
 <body>
 
 <div id="sidebar">
   <div class="sh">
-    <div class="sh-eyebrow">Cycling Odyssey Log</div>
-    <div class="sh-title">TAITO'S RIDES</div>
+    <div class="sh-eyebrow">Cycling Journey Log</div>
+    <div class="sh-title">RIDES MAP</div>
     <div class="sh-sub">自転車旅　記録 ＆ 計画</div>
   </div>
   <div class="stats">
@@ -192,7 +285,12 @@
 </div>
 
 <div id="map"></div>
-<div id="hint">カードをクリックしてルートを表示</div>
+<div id="hint">カードをタップしてルートを表示</div>
+<button id="mobile-toggle">☰</button>
+<div id="distance-popup">
+  <div class="dist-label">次のポイントまで</div>
+  <div class="dist-value">--</div>
+</div>
 
 <script>
 /* ─── DATA ─── */
@@ -295,6 +393,35 @@ L.control.zoom({ position:'bottomright' }).addTo(map);
 /* ─── HELPERS ─── */
 function hex2rgba(h,a){ const r=parseInt(h.slice(1,3),16),g=parseInt(h.slice(3,5),16),b=parseInt(h.slice(5,7),16); return `rgba(${r},${g},${b},${a})`; }
 
+// Haversine formula for distance calculation
+function calcDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Earth's radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
+// Show distance popup
+function showDistancePopup(cp1, cp2, color, x, y) {
+  const dist = calcDistance(cp1.ll[0], cp1.ll[1], cp2.ll[0], cp2.ll[1]);
+  const popup = document.getElementById('distance-popup');
+  const label = cp1.name.replace(/.*[：:]/,'') + ' → ' + cp2.name.replace(/.*[：:]/,'');
+  popup.querySelector('.dist-label').textContent = label;
+  popup.querySelector('.dist-value').textContent = dist.toFixed(1) + ' km';
+  popup.querySelector('.dist-value').style.color = color;
+  popup.style.borderColor = color;
+  popup.style.left = Math.min(x + 15, window.innerWidth - 180) + 'px';
+  popup.style.top = Math.min(y - 30, window.innerHeight - 80) + 'px';
+  popup.style.display = 'block';
+
+  clearTimeout(popup._hideTimer);
+  popup._hideTimer = setTimeout(() => { popup.style.display = 'none'; }, 3000);
+}
+
 function markerIcon(label, color, type){
   const sz = (type==='start'||type==='goal') ? 30 : type==='ferry' ? 28 : 24;
   const em = type==='start'?'🚲':type==='goal'?'🏁':type==='ferry'?'⛴':null;
@@ -332,17 +459,36 @@ TRIPS.forEach(t => {
   }
 
   // Checkpoints
-  t.checkpoints.forEach(cp => {
+  t.checkpoints.forEach((cp, idx) => {
     const m = L.marker(cp.ll,{
       icon:markerIcon(cp.label, t.color, cp.type),
       zIndexOffset:(cp.type==='start'||cp.type==='goal')?1000:100
     });
     const dayTxt = cp.type==='start'?'START':cp.type==='goal'?'GOAL':cp.type==='ferry'?'FERRY':`Day ${cp.label}`;
+
+    // Calculate distance to next checkpoint
+    let distInfo = '';
+    if (idx < t.checkpoints.length - 1) {
+      const nextCp = t.checkpoints[idx + 1];
+      const dist = calcDistance(cp.ll[0], cp.ll[1], nextCp.ll[0], nextCp.ll[1]);
+      distInfo = `<div class="pu-dist" style="margin-top:6px;font-family:'Space Mono',monospace;font-size:11px;color:${t.color}">→ 次まで ${dist.toFixed(1)} km</div>`;
+    }
+
     m.bindPopup(`
       <div class="pu-day" style="color:${t.color}">${dayTxt} · ${t.date}</div>
       <div class="pu-name">${cp.name.replace(/.*[：:]/,'')}</div>
       <div class="pu-meta">${t.title}</div>
-    `,{ closeButton:false, maxWidth:180 });
+      ${distInfo}
+    `,{ closeButton:false, maxWidth:200 });
+
+    // On click show distance popup as well
+    m.on('click', function(e) {
+      if (idx < t.checkpoints.length - 1) {
+        const nextCp = t.checkpoints[idx + 1];
+        showDistancePopup(cp, nextCp, t.color, e.originalEvent.clientX, e.originalEvent.clientY);
+      }
+    });
+
     m.addTo(grp);
   });
 
@@ -420,6 +566,19 @@ function selectTrip(id){
 }
 
 buildCards();
+
+// Mobile toggle
+const mobileToggle = document.getElementById('mobile-toggle');
+const sidebar = document.getElementById('sidebar');
+mobileToggle.addEventListener('click', () => {
+  sidebar.classList.toggle('collapsed');
+  mobileToggle.textContent = sidebar.classList.contains('collapsed') ? '☰' : '✕';
+});
+
+// Hide distance popup on map click
+map.on('click', () => {
+  document.getElementById('distance-popup').style.display = 'none';
+});
 
 // fade hint after 4s
 setTimeout(()=>{ document.getElementById('hint').style.opacity='0'; },4000);
