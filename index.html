@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Taito's Cycling Odyssey</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Noto+Serif+JP:wght@300;400;600&family=Space+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root {
+    --bg:    #080c14;
+    --panel: #0c1322;
+    --card:  #111a2b;
+    --card2: #172236;
+    --txt:   #ddd4be;
+    --txt2:  #7a8fa8;
+    --dim:   #334158;
+    --bdr:   #1a2d48;
+    --c1: #FF6B35;
+    --c2: #3DD6C8;
+    --c3: #F5D742;
+    --c4: #8FE0B8;
+  }
+  html, body { height:100%; overflow:hidden; background:var(--bg); }
+  body { display:flex; font-family:'Noto Serif JP',serif; color:var(--txt); }
+
+  /* ── SIDEBAR ── */
+  #sidebar {
+    width:340px; min-width:340px; height:100vh;
+    background:var(--panel);
+    border-right:1px solid var(--bdr);
+    display:flex; flex-direction:column;
+    overflow:hidden; position:relative; z-index:999;
+  }
+  #sidebar::before {
+    content:''; position:absolute; inset:0; pointer-events:none;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size:32px 32px;
+  }
+  .sh {
+    padding:22px 22px 16px;
+    border-bottom:1px solid var(--bdr);
+    position:relative;
+  }
+  .sh-eyebrow {
+    font-family:'Cinzel',serif; font-size:8.5px;
+    letter-spacing:.55em; color:var(--dim);
+    text-transform:uppercase; margin-bottom:8px;
+  }
+  .sh-title {
+    font-family:'Cinzel',serif; font-size:21px; font-weight:900;
+    color:var(--txt); line-height:1.1;
+  }
+  .sh-sub {
+    margin-top:5px; font-size:11px; color:var(--txt2);
+    letter-spacing:.08em;
+  }
+  /* odometer */
+  .stats {
+    display:flex; border-bottom:1px solid var(--bdr);
+  }
+  .stat {
+    flex:1; padding:12px 10px; text-align:center;
+    border-right:1px solid var(--bdr);
+  }
+  .stat:last-child { border-right:none; }
+  .stat-n {
+    font-family:'Space Mono',monospace; font-size:18px;
+    color:var(--txt);
+  }
+  .stat-l {
+    font-size:8.5px; color:var(--dim); letter-spacing:.12em;
+    margin-top:1px; text-transform:uppercase;
+  }
+
+  /* trips */
+  .trips { flex:1; overflow-y:auto; padding:14px;
+    scrollbar-width:thin; scrollbar-color:var(--bdr) transparent; }
+
+  .tcard {
+    margin-bottom:10px; border:1px solid var(--bdr);
+    border-radius:8px; background:var(--card);
+    cursor:pointer; transition:all .25s;
+    overflow:hidden; position:relative;
+  }
+  .tcard:hover { background:var(--card2); border-color:#253d5c; transform:translateX(2px); }
+  .tcard.active { border-color:var(--tc); box-shadow:0 0 0 1px var(--tc), inset 0 0 30px rgba(var(--tca),0.07); }
+  .tcard-top { padding:13px 14px; display:flex; align-items:flex-start; gap:11px; }
+  .tnum {
+    width:30px; height:30px; border-radius:50%; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Cinzel',serif; font-size:12px; font-weight:700;
+    margin-top:2px;
+  }
+  .tinfo { flex:1; }
+  .tname { font-size:12.5px; font-weight:600; color:var(--txt); margin-bottom:2px; }
+  .troute { font-size:10.5px; color:var(--txt2); margin-bottom:5px; }
+  .tmeta { display:flex; gap:8px; font-size:9.5px; color:var(--dim); flex-wrap:wrap; }
+  .tbadge {
+    font-family:'Cinzel',serif; font-size:8px;
+    padding:2px 7px; border-radius:3px;
+    align-self:flex-start; flex-shrink:0;
+    letter-spacing:.1em;
+  }
+  .done { background:rgba(61,214,200,.12); color:#3DD6C8; border:1px solid rgba(61,214,200,.28); }
+  .plan {
+    background:rgba(143,224,184,.08); color:#8FE0B8;
+    border:1px solid rgba(143,224,184,.25);
+    animation:blink 2.5s ease-in-out infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  /* checkpoint list */
+  .cplist { padding:0 14px 12px; display:none; }
+  .tcard.active .cplist { display:block; }
+  .cpitem {
+    display:flex; align-items:flex-start; gap:9px;
+    padding:4px 0; font-size:10.5px; color:var(--txt2);
+    position:relative;
+  }
+  .cpitem:not(:last-child)::after {
+    content:''; position:absolute; left:8px; top:20px; bottom:-4px;
+    width:1px; background:var(--bdr);
+  }
+  .cpdot {
+    width:18px; height:18px; border-radius:50%; border:2px solid;
+    display:flex; align-items:center; justify-content:center;
+    font-size:7.5px; font-family:'Space Mono',monospace;
+    font-weight:700; flex-shrink:0; background:var(--bg);
+  }
+
+  .sfooter {
+    padding:10px 14px; border-top:1px solid var(--bdr);
+    font-size:9.5px; color:var(--dim); text-align:center;
+    letter-spacing:.06em; line-height:1.6;
+  }
+
+  /* ── MAP ── */
+  #map { flex:1; height:100vh; }
+
+  /* Leaflet popup */
+  .leaflet-popup-content-wrapper {
+    background:var(--card) !important;
+    border:1px solid var(--bdr) !important;
+    border-radius:8px !important;
+    box-shadow:0 6px 24px rgba(0,0,0,.6) !important;
+    color:var(--txt) !important;
+  }
+  .leaflet-popup-tip-container { display:none; }
+  .leaflet-popup-content { margin:11px 14px; font-family:'Noto Serif JP',serif; }
+  .pu-day {
+    font-family:'Cinzel',serif; font-size:9px;
+    letter-spacing:.15em; margin-bottom:3px;
+  }
+  .pu-name { font-size:13.5px; font-weight:600; color:#ddd4be; }
+  .pu-meta { font-size:9.5px; color:#7a8fa8; margin-top:2px; }
+  .leaflet-popup-close-button { color:var(--txt2) !important; }
+
+  /* hint overlay */
+  #hint {
+    position:absolute; bottom:18px; left:358px; z-index:800;
+    background:rgba(12,19,34,.85); border:1px solid var(--bdr);
+    border-radius:6px; padding:8px 14px;
+    font-size:10px; color:var(--txt2); letter-spacing:.06em;
+    pointer-events:none; backdrop-filter:blur(4px);
+    transition:opacity .5s;
+  }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div class="sh">
+    <div class="sh-eyebrow">Cycling Odyssey Log</div>
+    <div class="sh-title">TAITO'S RIDES</div>
+    <div class="sh-sub">自転車旅　記録 ＆ 計画</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="stat-n">4</div><div class="stat-l">Trips</div></div>
+    <div class="stat"><div class="stat-n">3</div><div class="stat-l">完走</div></div>
+    <div class="stat"><div class="stat-n">~2,000</div><div class="stat-l">推定km</div></div>
+  </div>
+  <div class="trips" id="trips-container"></div>
+  <div class="sfooter">
+    🚲 スタート地点<br>神奈川県立鶴嶺高校
+  </div>
+</div>
+
+<div id="map"></div>
+<div id="hint">カードをクリックしてルートを表示</div>
+
+<script>
+/* ─── DATA ─── */
+const TRIPS = [
+  {
+    id:1, color:'#FF6B35', status:'completed',
+    title:'第1回：東海道ライド',
+    route:'茅ヶ崎 → 大阪駅',
+    date:'2019年3月', days:'3泊', dist:'約550km',
+    checkpoints:[
+      {label:'S', name:'START：鶴嶺高校',   ll:[35.3408,139.4058], type:'start'},
+      {label:'1', name:'1日目：静岡市',      ll:[34.9756,138.3827], type:'night'},
+      {label:'2', name:'2日目：浜松市',      ll:[34.7108,137.7261], type:'night'},
+      {label:'3', name:'3日目：名古屋市',    ll:[35.1815,136.9066], type:'night'},
+      {label:'G', name:'GOAL：大阪駅',       ll:[34.7024,135.4959], type:'goal'},
+    ],
+    path:[
+      [35.3408,139.4058],[35.2557,139.1517],[35.1077,138.8608],
+      [34.9756,138.3827],[34.8038,137.9226],[34.7108,137.7261],
+      [34.6906,137.3894],[34.9500,137.1200],[35.1815,136.9066],
+      [34.9500,136.5500],[34.7500,136.1500],[34.7024,135.4959],
+    ]
+  },
+  {
+    id:2, color:'#3DD6C8', status:'completed',
+    title:'第2回：山陽ライド',
+    route:'大阪駅 → 博多駅',
+    date:'2020年3月', days:'4泊', dist:'約550km',
+    checkpoints:[
+      {label:'S', name:'START：大阪駅', ll:[34.7024,135.4959], type:'start'},
+      {label:'1', name:'1日目：姫路',   ll:[34.8394,134.6939], type:'night'},
+      {label:'2', name:'2日目：岡山',   ll:[34.6618,133.9344], type:'night'},
+      {label:'3', name:'3日目：広島',   ll:[34.3853,132.4553], type:'night'},
+      {label:'4', name:'4日目：下関',   ll:[33.9529,130.9330], type:'night'},
+      {label:'G', name:'GOAL：博多駅',  ll:[33.5904,130.4204], type:'goal'},
+    ],
+    path:[
+      [34.7024,135.4959],[34.8394,134.6939],[34.7500,134.2500],
+      [34.6618,133.9344],[34.5000,133.4000],[34.3853,132.4553],
+      [34.2000,131.9500],[34.0533,131.5717],[33.9529,130.9330],
+      [33.8800,130.8700],[33.7200,130.6800],[33.5904,130.4204],
+    ]
+  },
+  {
+    id:3, color:'#F5D742', status:'completed',
+    title:'第3回：沖縄一周',
+    route:'沖縄本島 一周',
+    date:'2023年3月', days:'2泊', dist:'約380km',
+    checkpoints:[
+      {label:'S', name:'START：那覇',  ll:[26.2124,127.6809], type:'start'},
+      {label:'1', name:'1日目：名護',  ll:[26.5910,127.9778], type:'night'},
+      {label:'2', name:'2日目：辺戸岬',ll:[26.8654,128.2559], type:'night'},
+      {label:'G', name:'GOAL：那覇',   ll:[26.2200,127.6950], type:'goal'},
+    ],
+    path:[
+      [26.2124,127.6809],[26.2700,127.7200],[26.3344,127.7631],
+      [26.4200,127.8300],[26.5000,127.9000],[26.5910,127.9778],
+      [26.6800,128.0600],[26.7500,128.1600],[26.8654,128.2559],
+      [26.7800,128.2400],[26.6700,128.1900],[26.5500,127.9800],
+      [26.4000,127.8500],[26.3000,127.7800],[26.2200,127.6950],
+    ]
+  },
+  {
+    id:4, color:'#8FE0B8', status:'planned',
+    title:'第4回：東北縦断ライド',
+    route:'茅ヶ崎 → 大間 ⛴ 北海道',
+    date:'2026年9月（予定）', days:'？泊', dist:'約1,000km+',
+    checkpoints:[
+      {label:'S', name:'START：鶴嶺高校',        ll:[35.3408,139.4058], type:'start'},
+      {label:'1', name:'Day 1：宇都宮',          ll:[36.5551,139.8827], type:'night'},
+      {label:'2', name:'Day 2：郡山',             ll:[37.3941,140.3839], type:'night'},
+      {label:'3', name:'Day 3：仙台',             ll:[38.2682,140.8694], type:'night'},
+      {label:'4', name:'Day 4：盛岡',             ll:[39.7036,141.1527], type:'night'},
+      {label:'5', name:'Day 5：八戸',             ll:[40.5128,141.4881], type:'night'},
+      {label:'G', name:'GOAL：大間（フェリー）',  ll:[41.5278,140.9094], type:'goal'},
+      {label:'⛴', name:'フェリー着：函館',       ll:[41.7686,140.7289], type:'ferry'},
+    ],
+    path:[
+      [35.3408,139.4058],[35.5200,139.6800],[35.6762,139.6503],
+      [35.8700,139.7200],[36.0700,139.8900],[36.3000,139.9200],
+      [36.5551,139.8827],[36.9200,140.1100],[37.1300,140.1700],
+      [37.3941,140.3839],[37.7521,140.4675],[38.0600,140.6100],
+      [38.2682,140.8694],[38.6500,141.0500],[39.0200,141.1000],
+      [39.7036,141.1527],[40.0200,141.2200],[40.2033,141.3639],
+      [40.5128,141.4881],[40.7200,141.3800],[41.0100,141.2200],
+      [41.2900,141.2000],[41.5278,140.9094],
+    ],
+    ferry:[[41.5278,140.9094],[41.7686,140.7289]]
+  }
+];
+
+/* ─── MAP INIT ─── */
+const map = L.map('map',{ zoomControl:false }).setView([36,137],5);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+  attribution:'© OpenStreetMap contributors © CARTO',
+  subdomains:'abcd', maxZoom:19
+}).addTo(map);
+L.control.zoom({ position:'bottomright' }).addTo(map);
+
+/* ─── HELPERS ─── */
+function hex2rgba(h,a){ const r=parseInt(h.slice(1,3),16),g=parseInt(h.slice(3,5),16),b=parseInt(h.slice(5,7),16); return `rgba(${r},${g},${b},${a})`; }
+
+function markerIcon(label, color, type){
+  const sz = (type==='start'||type==='goal') ? 30 : type==='ferry' ? 28 : 24;
+  const em = type==='start'?'🚲':type==='goal'?'🏁':type==='ferry'?'⛴':null;
+  const dispColor = type==='ferry'?'#6baed6':color;
+  const html = `<div style="
+    width:${sz}px;height:${sz}px;border-radius:50%;
+    background:${dispColor};border:2px solid rgba(0,0,0,0.4);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Space Mono',monospace;font-weight:700;
+    font-size:${em?'13':'9'}px;color:#070c14;
+    box-shadow:0 2px 10px rgba(0,0,0,.55),0 0 0 2px ${hex2rgba(dispColor,0.35)};
+    cursor:pointer;transition:transform .15s;
+  ">${em||label}</div>`;
+  return L.divIcon({ html, className:'', iconSize:[sz,sz], iconAnchor:[sz/2,sz/2] });
+}
+
+/* ─── BUILD LAYERS ─── */
+const LAYERS = {};
+let active = null;
+
+TRIPS.forEach(t => {
+  const grp = L.layerGroup();
+
+  // Glow
+  L.polyline(t.path, { color:t.color, weight:14, opacity:.1, lineCap:'round' }).addTo(grp);
+  // Line
+  const pl = L.polyline(t.path, {
+    color:t.color, weight:t.status==='planned'?3:4,
+    opacity:.88, lineCap:'round', lineJoin:'round',
+    dashArray:t.status==='planned'?'12,9':null
+  }).addTo(grp);
+  // Ferry dashed
+  if(t.ferry){
+    L.polyline(t.ferry,{ color:'#6baed6', weight:3, opacity:.75, dashArray:'7,7' }).addTo(grp);
+  }
+
+  // Checkpoints
+  t.checkpoints.forEach(cp => {
+    const m = L.marker(cp.ll,{
+      icon:markerIcon(cp.label, t.color, cp.type),
+      zIndexOffset:(cp.type==='start'||cp.type==='goal')?1000:100
+    });
+    const dayTxt = cp.type==='start'?'START':cp.type==='goal'?'GOAL':cp.type==='ferry'?'FERRY':`Day ${cp.label}`;
+    m.bindPopup(`
+      <div class="pu-day" style="color:${t.color}">${dayTxt} · ${t.date}</div>
+      <div class="pu-name">${cp.name.replace(/.*[：:]/,'')}</div>
+      <div class="pu-meta">${t.title}</div>
+    `,{ closeButton:false, maxWidth:180 });
+    m.addTo(grp);
+  });
+
+  grp.addTo(map);
+  LAYERS[t.id] = { grp, pl, bounds:pl.getBounds() };
+});
+
+/* ─── SIDEBAR ─── */
+function buildCards(){
+  const c = document.getElementById('trips-container');
+  TRIPS.forEach(t => {
+    const div = document.createElement('div');
+    div.className='tcard'; div.id=`tc${t.id}`;
+    div.style.cssText=`--tc:${t.color};--tca:${t.color.slice(1)};`;
+
+    const cps = t.checkpoints.map(cp=>`
+      <div class="cpitem">
+        <div class="cpdot" style="border-color:${t.color};color:${t.color}">${cp.label}</div>
+        <div>${cp.name}</div>
+      </div>`).join('');
+
+    div.innerHTML=`
+      <div class="tcard-top">
+        <div class="tnum" style="background:${hex2rgba(t.color,.14)};color:${t.color};border:1.5px solid ${hex2rgba(t.color,.35)}">${t.id}</div>
+        <div class="tinfo">
+          <div class="tname">${t.title}</div>
+          <div class="troute">${t.route}</div>
+          <div class="tmeta">
+            <span>📅 ${t.date}</span>
+            <span>🚴 ${t.dist}</span>
+            <span>🌙 ${t.days}</span>
+          </div>
+        </div>
+        <div class="tbadge ${t.status==='completed'?'done':'plan'}">${t.status==='completed'?'✓ 完走':'予定'}</div>
+      </div>
+      <div class="cplist">${cps}</div>`;
+
+    div.addEventListener('click',()=>selectTrip(t.id));
+    c.appendChild(div);
+  });
+}
+
+function setAllOpacity(tripId){
+  TRIPS.forEach(t=>{
+    const l = LAYERS[t.id];
+    l.grp.eachLayer(layer=>{
+      if(layer.setStyle){
+        if(tripId===null || t.id===tripId){
+          layer.setStyle({ opacity:layer.options._origOpacity??layer.options.opacity });
+        } else {
+          if(layer.options._origOpacity===undefined) layer.options._origOpacity = layer.options.opacity;
+          layer.setStyle({ opacity:.12 });
+        }
+      }
+    });
+  });
+}
+
+function selectTrip(id){
+  if(active===id){
+    active=null;
+    document.querySelectorAll('.tcard').forEach(c=>c.classList.remove('active'));
+    setAllOpacity(null);
+    map.flyTo([36,137],5,{duration:1.4});
+    document.getElementById('hint').style.opacity='1';
+    return;
+  }
+  active=id;
+  document.querySelectorAll('.tcard').forEach(c=>c.classList.remove('active'));
+  document.getElementById(`tc${id}`).classList.add('active');
+  setAllOpacity(id);
+  const b = LAYERS[id].bounds;
+  if(b.isValid()) map.flyToBounds(b,{ padding:[60,60], duration:1.6, maxZoom:9 });
+  document.getElementById('hint').style.opacity='0';
+}
+
+buildCards();
+
+// fade hint after 4s
+setTimeout(()=>{ document.getElementById('hint').style.opacity='0'; },4000);
+</script>
+</body>
+</html>
