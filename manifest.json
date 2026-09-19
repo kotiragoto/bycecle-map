@@ -1,0 +1,12 @@
+{
+  "name": "RIDES LOG",
+  "short_name": "RIDES",
+  "start_url": "log.html",
+  "display": "standalone",
+  "background_color": "#080c14",
+  "theme_color": "#080c14",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
